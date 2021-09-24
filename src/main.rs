@@ -1,8 +1,7 @@
+use cubox::*;
 use std::process;
-// use cubox::*;
 
 fn main() {
-    
     let (opts, matches) = match get_matches() {
         Ok(m) => m,
         Err(e) => {
@@ -13,7 +12,9 @@ fn main() {
 
     match handle_options(opts, &matches) {
         Ok(done) => {
-            if done { return };
+            if done {
+                return;
+            };
         }
         Err(e) => {
             eprintln!("[Error] {}", e);
@@ -21,7 +22,7 @@ fn main() {
         }
     }
 
-    let cubox_request = match build_request(&matches) {
+    let cubox_request = match build_request(matches) {
         Ok(req) => req,
         Err(e) => {
             eprintln!("[Error] {}", e);
@@ -43,7 +44,7 @@ fn main() {
         }
         _ => {
             eprintln!("✕ Save failed: {}", cubox_response.message);
+            process::exit(1);
         }
     }
 }
-
