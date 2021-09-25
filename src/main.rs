@@ -1,35 +1,25 @@
 use cubox::*;
-use std::process;
 
 fn main() {
-    let (opts, matches) = get_matches().unwrap_or_else(|err| {
-        eprintln!("[Error] {}", err);
-        process::exit(1);
-    });
+    if let Err(e) = run() {
+        eprintln!("[Error] {}", e);
+        std::process::exit(1);
+    }
+}
 
-    let is_done = handle_options(opts, &matches).unwrap_or_else(|err| {
-        eprintln!("[Error] {}", err);
-        process::exit(1);
-    });
-    if is_done { return }
-
-    let cubox_request = build_request(matches).unwrap_or_else(|err| {
-        eprintln!("[Error] {}", err);
-        process::exit(1);
-    });
-
-    let cubox_response = send_request(cubox_request).unwrap_or_else(|err| {
-        eprintln!("[Error] {}", err);
-        process::exit(1);
-    });
-
+fn run() -> Result<(), String> {
+    let (opts, matches) = get_matches()?;
+    let done = handle_options(opts, &matches)?;
+    if done {
+        return Ok(());
+    }
+    let cubox_request = build_request(matches)?;
+    let cubox_response = send_request(cubox_request)?;
     match cubox_response.code {
         200 => {
             println!("✓ Saved!");
+            Ok(())
         }
-        _ => {
-            eprintln!("✕ Save failed: {}", cubox_response.message);
-            process::exit(1);
-        }
+        _ => Err(format!("✕ Save failed: {}", cubox_response.message)),
     }
 }

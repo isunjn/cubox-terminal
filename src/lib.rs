@@ -62,7 +62,7 @@ pub fn get_matches() -> Result<(getopts::Options, Matches), String> {
     opts.optflag("v", "version", "Show the version of cu")
         .optflag("h", "help", "Show the help message of cu")
         .optflag("c", "count", "Show how many times API was used")
-        .optflagopt("k", "apikey", "Set up your cubox API key", "API-KEY")
+        .optflagopt("k", "apikey", "Set up your cubox API key", "KEY")
         .optflagopt(
             "l",
             "url",
@@ -78,7 +78,7 @@ pub fn get_matches() -> Result<(getopts::Options, Matches), String> {
 
 pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool, &'static str> {
     if matches.opt_present("v") {
-        println!("v0.0.1");
+        println!(env!("CARGO_PKG_VERSION"));
         return Ok(true);
     }
 
@@ -98,19 +98,17 @@ pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool,
         return Ok(true);
     }
 
-    if let Some(api_key) = matches.opt_str("apikey") {
-        let key = api_key.clone();
-        confy::store(
-            "cubox",
-            UserCfg {
-                api_key: Some(api_key),
-            },
-        )
-        .unwrap(); // TODO
-        println!("✓ API key set to: {}", key);
+    if let Some(api_key) = matches.opt_str("k") {
+        let cfg = UserCfg {
+            api_key: Some(api_key),
+        };
+        if let Err(_) = confy::store("cubox", cfg) {
+            return Err("Fail to store API key");
+        };
+        println!("✓ API key set.");
         return Ok(true);
     } else {
-        if matches.opt_present("apikey") {
+        if matches.opt_present("k") {
             return Err("Expect API key: cu --apikey [API-KEY]");
         }
     }
