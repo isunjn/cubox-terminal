@@ -1,5 +1,6 @@
 use confy;
 use getopts::Matches;
+use reqwest;
 use serde::{Deserialize, Serialize};
 
 /// User configuration
@@ -61,9 +62,9 @@ pub fn get_matches() -> Result<(getopts::Options, Matches), String> {
     opts.optflag("v", "version", "Show the version of cu")
         .optflag("h", "help", "Show the help message of cu")
         .optflag("c", "count", "Show how many times API was used")
-        .optflagopt("", "apikey", "Set up your cubox API key", "API-KEY")
+        .optflagopt("k", "apikey", "Set up your cubox API key", "API-KEY")
         .optflagopt(
-            "",
+            "l",
             "url",
             "Take an url to create a bookmark\n ranther than a memo",
             "URL",
@@ -75,7 +76,7 @@ pub fn get_matches() -> Result<(getopts::Options, Matches), String> {
     }
 }
 
-pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool, String> {
+pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool, &'static str> {
     if matches.opt_present("v") {
         println!("v0.0.1");
         return Ok(true);
@@ -97,31 +98,27 @@ pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool,
         return Ok(true);
     }
 
-    if matches.opt_present("apikey") {
-        match matches.opt_str("apikey") {
-            // TODO: save_api_key()
-            Some(api_key) => {
-                let key = api_key.clone();
-                confy::store(
-                    "cubox",
-                    UserCfg {
-                        api_key: Some(api_key),
-                    },
-                )
-                .unwrap(); // TODO
-                println!("✓ API key set to: {}", key);
-                return Ok(true);
-            }
-            None => {
-                return Err("Expect API key: cu --apikey [API-KEY]".to_string());
-            }
+    if let Some(api_key) = matches.opt_str("apikey") {
+        let key = api_key.clone();
+        confy::store(
+            "cubox",
+            UserCfg {
+                api_key: Some(api_key),
+            },
+        )
+        .unwrap(); // TODO
+        println!("✓ API key set to: {}", key);
+        return Ok(true);
+    } else {
+        if matches.opt_present("apikey") {
+            return Err("Expect API key: cu --apikey [API-KEY]");
         }
     }
 
     Ok(false)
 }
 
-pub fn build_request(matches: Matches) -> Result<CuboxRequest, String> {
+pub fn build_request(matches: Matches) -> Result<CuboxRequest, &'static str> {
     let mut cubox_request = CuboxRequest {
         req_type: "memo".to_string(),
         content: "".to_string(),
@@ -136,11 +133,11 @@ pub fn build_request(matches: Matches) -> Result<CuboxRequest, String> {
             cubox_request.folder = Some(folder.to_owned());
             continue;
         }
-        if let Some(title) = s.strip_prefix("::") {
+        if let Some(title) = s.strip_prefix("^") {
             cubox_request.title = Some(title.to_owned());
             continue;
         }
-        if let Some(tag) = s.strip_prefix("^") {
+        if let Some(tag) = s.strip_prefix("::") {
             match cubox_request.tags {
                 Some(ref mut tags) => {
                     tags.push(tag.to_owned());
@@ -166,27 +163,27 @@ pub fn build_request(matches: Matches) -> Result<CuboxRequest, String> {
                 cubox_request.content = url;
             }
             None => {
-                return Err("Expect an URL: 'cu --url [URL]'".to_string());
+                return Err("Expect an URL: 'cu --url [URL]'");
             }
         }
     }
 
     if cubox_request.content.is_empty() {
-        return Err("Ops! Nothing to save.".to_string());
+        return Err("Ops! Nothing to save.");
     }
 
     Ok(cubox_request)
 }
 
-pub fn send_request(req: CuboxRequest) -> Result<CuboxResponse, String> {
+pub fn send_request(req: CuboxRequest) -> Result<CuboxResponse, &'static str> {
     let cfg: UserCfg = match confy::load("cubox") {
         Ok(cfg) => cfg,
-        Err(_) => return Err("Fail to load config file.".to_string()),
+        Err(_) => return Err("Fail to load config file."),
     };
 
     let api_key = match cfg.api_key {
         Some(api_key) => api_key,
-        None => return Err("API key not found! Use 'cu --apikey [API-KEY]' to set.".to_string()),
+        None => return Err("API key not found! Use 'cu --apikey [API-KEY]' to set."),
     };
 
     let cubox_api_url = "https://cubox.pro/c/api/save/".to_string() + &api_key;
@@ -194,11 +191,11 @@ pub fn send_request(req: CuboxRequest) -> Result<CuboxResponse, String> {
     let client = reqwest::blocking::Client::new();
     let resp = match client.post(cubox_api_url).json(&req).send() {
         Ok(resp) => resp,
-        Err(_) => return Err("Fail to send request".to_string()),
+        Err(_) => return Err("Fail to send request"),
     };
 
     match resp.json::<CuboxResponse>() {
         Ok(resp) => Ok(resp),
-        Err(_) => Err("Fail to parse response to json".to_string()),
+        Err(_) => Err("Fail to parse response to json"),
     }
 }

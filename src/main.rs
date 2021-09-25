@@ -2,41 +2,26 @@ use cubox::*;
 use std::process;
 
 fn main() {
-    let (opts, matches) = match get_matches() {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("[Error] {}", e);
-            process::exit(1);
-        }
-    };
+    let (opts, matches) = get_matches().unwrap_or_else(|err| {
+        eprintln!("[Error] {}", err);
+        process::exit(1);
+    });
 
-    match handle_options(opts, &matches) {
-        Ok(done) => {
-            if done {
-                return;
-            };
-        }
-        Err(e) => {
-            eprintln!("[Error] {}", e);
-            process::exit(1);
-        }
-    }
+    let is_done = handle_options(opts, &matches).unwrap_or_else(|err| {
+        eprintln!("[Error] {}", err);
+        process::exit(1);
+    });
+    if is_done { return }
 
-    let cubox_request = match build_request(matches) {
-        Ok(req) => req,
-        Err(e) => {
-            eprintln!("[Error] {}", e);
-            process::exit(1);
-        }
-    };
+    let cubox_request = build_request(matches).unwrap_or_else(|err| {
+        eprintln!("[Error] {}", err);
+        process::exit(1);
+    });
 
-    let cubox_response = match send_request(cubox_request) {
-        Ok(res) => res,
-        Err(e) => {
-            eprintln!("[Error] {}", e);
-            process::exit(1);
-        }
-    };
+    let cubox_response = send_request(cubox_request).unwrap_or_else(|err| {
+        eprintln!("[Error] {}", err);
+        process::exit(1);
+    });
 
     match cubox_response.code {
         200 => {
