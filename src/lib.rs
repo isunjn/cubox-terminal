@@ -1,19 +1,72 @@
-use confy;
+use std::fs;
+use std::io::ErrorKind::NotFound;
+// use std::path::{Path, PathBuf};
+
 use getopts::Matches;
 use reqwest;
-use serde::{Deserialize, Serialize};
+// use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-/// User configuration
+
 #[derive(Serialize, Deserialize)]
 struct UserCfg {
-    api_key: Option<String>,
+    api_key: Option<String>
 }
 
-impl std::default::Default for UserCfg {
-    fn default() -> Self {
-        Self { api_key: None }
+#[derive(Serialize, Deserialize)]
+struct UserData {
+    count_today: i32,
+    count_total: i32,
+}
+
+fn load<T: DeserializeOwned>(file: &str) -> Result<T, ()> {
+    let path = match dirs::home_dir() {
+        Some(p) => {
+            p.push(".cubox");
+            p.set_file_name(file);
+            p.set_extension("json");
+            p
+        },
+        None => return Err(())
+    };
+    match fs::read_to_string(path) {
+        Ok(content) => {
+            Ok(serde_json::from_str::<T>(&content).unwrap())
+        },
+        Err(e) if e.kind() == NotFound => {
+            match file {
+                "config" => {
+                    let cfg = UserCfg {api_key: None};
+                    store(file, &cfg);
+                    Ok(cfg)
+                },
+                "data" => {
+                    let data = UserData { count_today: 0, count_total: 0 };
+                    store(file, &data);
+                    Ok(data)
+                },
+                _ => Err(())
+            }
+        },
+        Err(_) => Err(())
     }
 }
+
+fn store<T: Serialize>(file: &str, content: &T) -> Result<(),()> {
+    let path = match dirs::home_dir() {
+        Some(p) => {
+            p.push(".cubox");
+            p.set_file_name(file);
+            p.set_extension("json");
+            p
+        },
+        None => return Err(())
+    };
+    let content = serde_json::to_string_pretty(content).unwrap();
+    fs::write(path, content).unwrap();
+    Ok(())
+}
+
 
 /// Cubox request
 #[derive(Serialize, Debug)]
