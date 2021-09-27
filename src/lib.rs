@@ -1,6 +1,7 @@
 use std::fs;
 use std::io::ErrorKind::NotFound;
 use chrono::{naive::NaiveDate, Local};
+use colored::Colorize;
 use getopts::Matches;
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -96,9 +97,9 @@ pub struct CuboxResponse {
 //------------------- pravite function -----------------------
 
 fn print_usage(opts: getopts::Options) {
-    let brief = "cu: Take cubox memo in terminal";
+    let brief = "Take cubox memo in terminal";
     let usage =
-        "Usage: cu [options]\n       cu some memo text @folder ^title ::tag1 ::tag2 %description";
+        "Usage:\n    cu some memo text @folder ^title ::tag1 ::tag2 %description\n    cu [options]";
     let help = format!("{}\n\n{}", brief, usage);
     print!("{}", opts.usage(&help));
 }
@@ -109,20 +110,20 @@ pub fn get_matches() -> Result<(getopts::Options, Matches), String> {
     let args: Vec<String> = std::env::args().collect();
 
     let mut opts = getopts::Options::new();
-    opts.optflag("v", "version", "Show the version of cu")
-        .optflag("h", "help", "Show the help message of cu")
-        .optflag("c", "count", "Show how many times API was used")
-        .optflagopt("k", "apikey", "Set up your cubox API key", "KEY")
+    opts.optflag("v", "version", "Show version info")
+        .optflag("h", "help", "Show help info")
+        .optflag("c", "count", "Show API usage count")
+        .optflagopt("k", "apikey", "Set your API key", "KEY")
         .optflagopt(
             "l",
             "url",
-            "Take an url to create a bookmark\n ranther than a memo",
+            "Bookmark a web page",
             "URL",
         );
 
     match opts.parse(&args[1..]) {
         Ok(m) => Ok((opts, m)),
-        Err(f) => Err(f.to_string()),
+        Err(f) => Err(format!("[Error] {}", f.to_string())),
     }
 }
 
@@ -138,7 +139,7 @@ pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool,
     }
 
     if matches.opt_present("c") {
-        let mut data: UserData = load("data").unwrap(); // TODO maybe oop style is better
+        let mut data: UserData = load("data").unwrap();
         let today = Local::now().naive_local().date();
         if let Some(last_date) = data.last_date {
             if today > last_date {
@@ -146,8 +147,11 @@ pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool,
             }
         }
         println!(
-            "Saved via API using cu:\nToday: {}\nTotal: {}",
-            data.count_today, data.count_total
+            "{} {}  {} {}",
+            "Today:".blue(),
+            data.count_today,
+            "Total:".blue(),
+            data.count_total
         );
         return Ok(true);
     }
@@ -157,13 +161,13 @@ pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool,
             api_key: Some(api_key),
         };
         if let Err(_) = store("config", &cfg) {
-            return Err("Fail to store API key");
+            return Err("[Error] Fail to store API key");
         };
-        println!("✓ API key set.");
+        println!("{}", "✓ API key set".green());
         return Ok(true);
     } else {
         if matches.opt_present("k") {
-            return Err("Expect API key: cu --apikey [API-KEY]");
+            return Err("[Error] Expect API key: cu -k [KEY]");
         }
     }
 
@@ -215,13 +219,13 @@ pub fn build_request(matches: Matches) -> Result<CuboxRequest, &'static str> {
                 cubox_request.content = url;
             }
             None => {
-                return Err("Expect an URL: 'cu --url [URL]'");
+                return Err("[Error] Expect an URL: cu -l [URL]");
             }
         }
     }
 
     if cubox_request.content.is_empty() {
-        return Err("Ops! Nothing to save.");
+        return Err("Oops, nothing to save");
     }
 
     Ok(cubox_request)
@@ -230,12 +234,12 @@ pub fn build_request(matches: Matches) -> Result<CuboxRequest, &'static str> {
 pub fn send_request(req: CuboxRequest) -> Result<CuboxResponse, &'static str> {
     let cfg: UserCfg = match load("config") {
         Ok(cfg) => cfg,
-        Err(_) => return Err("Fail to load config file."),
+        Err(_) => return Err("[Error] Fail to load config file"),
     };
 
     let api_key = match cfg.api_key {
         Some(api_key) => api_key,
-        None => return Err("API key not found! Use 'cu --apikey [API-KEY]' to set."),
+        None => return Err("[Error] API key not found! Use 'cu --apikey [KEY]' to set"),
     };
 
     let cubox_api_url = "https://cubox.pro/c/api/save/".to_string() + &api_key;
@@ -243,13 +247,10 @@ pub fn send_request(req: CuboxRequest) -> Result<CuboxResponse, &'static str> {
     let client = reqwest::blocking::Client::new();
     let resp = match client.post(cubox_api_url).json(&req).send() {
         Ok(resp) => resp,
-        Err(_) => return Err("Fail to send request"),
+        Err(_) => return Err("[Error] Fail to send request"),
     };
 
-    match resp.json::<CuboxResponse>() {
-        Ok(resp) => Ok(resp),
-        Err(_) => Err("Fail to parse response to json"),
-    }
+    Ok(resp.json::<CuboxResponse>().unwrap())
 }
 
 pub fn check_response(resp: CuboxResponse) -> Result<(), String> {
@@ -265,7 +266,7 @@ pub fn check_response(resp: CuboxResponse) -> Result<(), String> {
         data.count_today += 1;
         data.count_total += 1;
         store("data", &data).unwrap();
-        println!("✓ Saved!");
+        println!("{}", "✓ Saved".green());
         Ok(())
     } else {
         Err(format!("✕ Save failed: {}", resp.message))

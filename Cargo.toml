@@ -13,3 +13,4 @@ confy = "0.4"
 getopts = "0.2"
 dirs = "4.0.0"
 chrono = {version = "0.4", features = ["serde"] }
+colored = "2.0.0"

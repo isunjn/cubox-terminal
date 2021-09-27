@@ -1,8 +1,9 @@
 use cubox::*;
+use colored::Colorize;
 
 fn main() {
     if let Err(e) = run() {
-        eprintln!("[Error] {}", e);
+        eprintln!("{}", e.red());
         std::process::exit(1);
     }
 }
