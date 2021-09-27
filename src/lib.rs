@@ -34,7 +34,7 @@ fn load<T: Serialize + DeserializeOwned>(file: &str) -> Result<T, ()> {
         Ok(content) => Ok(serde_json::from_str::<T>(&content).unwrap()),
         Err(e) if e.kind() == NotFound => match file {
             "config" => {
-                let cfg = serde_json::from_str::<T>(r#"{"api_key":""}"#).unwrap();
+                let cfg = serde_json::from_str::<T>("{}").unwrap();
                 store(file, &cfg).unwrap();
                 Ok(cfg)
             }
@@ -236,7 +236,7 @@ pub fn send_request(req: CuboxRequest) -> Result<CuboxResponse, &'static str> {
 
     let api_key = match cfg.api_key {
         Some(api_key) => api_key,
-        None => return Err("[Error] API key not found! Use 'cu --apikey [KEY]' to set"),
+        None => return Err("[Error] API key not found! Use 'cu -k [KEY]' to set"),
     };
 
     let cubox_api_url = "https://cubox.pro/c/api/save/".to_string() + &api_key;
