@@ -1,10 +1,12 @@
-use std::fs;
-use std::io::ErrorKind::NotFound;
 use chrono::{naive::NaiveDate, Local};
 use colored::Colorize;
 use getopts::Matches;
 use reqwest;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use std::fs;
+use std::io::ErrorKind::NotFound;
+
+//---------------- config & data, load & store ------------------
 
 #[derive(Serialize, Deserialize)]
 struct UserCfg {
@@ -66,8 +68,9 @@ fn store<T: Serialize>(file: &str, content: &T) -> Result<(), ()> {
     Ok(())
 }
 
-/// Cubox request
-#[derive(Serialize, Debug)]
+//---------------- cubox request & response -------------------
+
+#[derive(Serialize)]
 pub struct CuboxRequest {
     #[serde(rename = "type")]
     req_type: String,
@@ -87,8 +90,7 @@ pub struct CuboxRequest {
     tags: Option<Vec<String>>,
 }
 
-/// Cubox response
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct CuboxResponse {
     pub message: String,
     pub code: i32,
@@ -114,12 +116,7 @@ pub fn get_matches() -> Result<(getopts::Options, Matches), String> {
         .optflag("h", "help", "Show help info")
         .optflag("c", "count", "Show API usage count")
         .optflagopt("k", "apikey", "Set your API key", "KEY")
-        .optflagopt(
-            "l",
-            "url",
-            "Bookmark a web page",
-            "URL",
-        );
+        .optflagopt("l", "url", "Bookmark a web page", "URL");
 
     match opts.parse(&args[1..]) {
         Ok(m) => Ok((opts, m)),

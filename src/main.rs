@@ -1,5 +1,5 @@
-use cubox::*;
 use colored::Colorize;
+use cubox::*;
 
 fn main() {
     if let Err(e) = run() {
