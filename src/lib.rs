@@ -1,72 +1,69 @@
 use std::fs;
 use std::io::ErrorKind::NotFound;
-// use std::path::{Path, PathBuf};
-
+use chrono::{naive::NaiveDate, Local};
 use getopts::Matches;
 use reqwest;
-// use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 struct UserCfg {
-    api_key: Option<String>
+    api_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
 struct UserData {
+    last_date: Option<NaiveDate>,
     count_today: i32,
     count_total: i32,
 }
 
-fn load<T: DeserializeOwned>(file: &str) -> Result<T, ()> {
+fn load<T: Serialize + DeserializeOwned>(file: &str) -> Result<T, ()> {
     let path = match dirs::home_dir() {
-        Some(p) => {
+        Some(mut p) => {
             p.push(".cubox");
-            p.set_file_name(file);
+            p.push(file);
             p.set_extension("json");
             p
-        },
-        None => return Err(())
+        }
+        None => return Err(()),
     };
     match fs::read_to_string(path) {
-        Ok(content) => {
-            Ok(serde_json::from_str::<T>(&content).unwrap())
-        },
-        Err(e) if e.kind() == NotFound => {
-            match file {
-                "config" => {
-                    let cfg = UserCfg {api_key: None};
-                    store(file, &cfg);
-                    Ok(cfg)
-                },
-                "data" => {
-                    let data = UserData { count_today: 0, count_total: 0 };
-                    store(file, &data);
-                    Ok(data)
-                },
-                _ => Err(())
+        Ok(content) => Ok(serde_json::from_str::<T>(&content).unwrap()),
+        Err(e) if e.kind() == NotFound => match file {
+            "config" => {
+                let cfg = serde_json::from_str::<T>(r#"{"api_key":""}"#).unwrap();
+                store(file, &cfg).unwrap();
+                Ok(cfg)
             }
+            "data" => {
+                let data =
+                    serde_json::from_str::<T>(r#"{"count_today":0,"count_total":0}"#).unwrap();
+                store(file, &data).unwrap();
+                Ok(data)
+            }
+            _ => Err(()),
         },
-        Err(_) => Err(())
+        Err(_) => Err(()),
     }
 }
 
-fn store<T: Serialize>(file: &str, content: &T) -> Result<(),()> {
-    let path = match dirs::home_dir() {
-        Some(p) => {
+fn store<T: Serialize>(file: &str, content: &T) -> Result<(), ()> {
+    let mut path = match dirs::home_dir() {
+        Some(mut p) => {
             p.push(".cubox");
-            p.set_file_name(file);
-            p.set_extension("json");
             p
-        },
-        None => return Err(())
+        }
+        None => return Err(()),
     };
+    if !path.exists() {
+        fs::create_dir(&path).unwrap();
+    }
+    path.push(file);
+    path.set_extension("json");
     let content = serde_json::to_string_pretty(content).unwrap();
     fs::write(path, content).unwrap();
     Ok(())
 }
-
 
 /// Cubox request
 #[derive(Serialize, Debug)]
@@ -141,12 +138,16 @@ pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool,
     }
 
     if matches.opt_present("c") {
-        //TODO: count_cacl()
-        let today_count = 0;
-        let total_count = 0;
+        let mut data: UserData = load("data").unwrap(); // TODO maybe oop style is better
+        let today = Local::now().naive_local().date();
+        if let Some(last_date) = data.last_date {
+            if today > last_date {
+                data.count_today = 0;
+            }
+        }
         println!(
             "Saved via API using cu:\nToday: {}\nTotal: {}",
-            today_count, total_count
+            data.count_today, data.count_total
         );
         return Ok(true);
     }
@@ -155,7 +156,7 @@ pub fn handle_options(opts: getopts::Options, matches: &Matches) -> Result<bool,
         let cfg = UserCfg {
             api_key: Some(api_key),
         };
-        if let Err(_) = confy::store("cubox", cfg) {
+        if let Err(_) = store("config", &cfg) {
             return Err("Fail to store API key");
         };
         println!("✓ API key set.");
@@ -227,7 +228,7 @@ pub fn build_request(matches: Matches) -> Result<CuboxRequest, &'static str> {
 }
 
 pub fn send_request(req: CuboxRequest) -> Result<CuboxResponse, &'static str> {
-    let cfg: UserCfg = match confy::load("cubox") {
+    let cfg: UserCfg = match load("config") {
         Ok(cfg) => cfg,
         Err(_) => return Err("Fail to load config file."),
     };
@@ -248,5 +249,25 @@ pub fn send_request(req: CuboxRequest) -> Result<CuboxResponse, &'static str> {
     match resp.json::<CuboxResponse>() {
         Ok(resp) => Ok(resp),
         Err(_) => Err("Fail to parse response to json"),
+    }
+}
+
+pub fn check_response(resp: CuboxResponse) -> Result<(), String> {
+    if let 200 = resp.code {
+        let mut data: UserData = load("data").unwrap();
+        let today = Local::now().naive_local().date();
+        if let Some(last_date) = data.last_date {
+            if today > last_date {
+                data.count_today = 0;
+            }
+        }
+        data.last_date = Some(today);
+        data.count_today += 1;
+        data.count_total += 1;
+        store("data", &data).unwrap();
+        println!("✓ Saved!");
+        Ok(())
+    } else {
+        Err(format!("✕ Save failed: {}", resp.message))
     }
 }

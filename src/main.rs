@@ -15,11 +15,6 @@ fn run() -> Result<(), String> {
     }
     let cubox_request = build_request(matches)?;
     let cubox_response = send_request(cubox_request)?;
-    match cubox_response.code {
-        200 => {
-            println!("✓ Saved!");
-            Ok(())
-        }
-        _ => Err(format!("✕ Save failed: {}", cubox_response.message)),
-    }
+    check_response(cubox_response)?;
+    Ok(())
 }
